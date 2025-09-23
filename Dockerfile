@@ -22,6 +22,9 @@ RUN apt-get update && apt-get install -y \
     # Clean up
     && rm -rf /var/lib/apt/lists/*
 
+# Create symlink for python (required by some build scripts)
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
 # Set environment variables for node-gyp and headless gl
 ENV DISPLAY=:99
 ENV PYTHON=/usr/bin/python3
