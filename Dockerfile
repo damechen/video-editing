@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y \
     libglu1-mesa-dev \
     libxss1 \
     libgconf-2-4 \
+    # Virtual display for headless OpenGL
+    xvfb \
+    mesa-utils \
     # Additional dependencies
     pkg-config \
     ffmpeg \
@@ -41,8 +44,18 @@ RUN yarn install --verbose
 # Copy the rest of the application
 COPY . .
 
+# Create a startup script that sets up Xvfb and runs the app
+RUN echo '#!/bin/bash\n\
+# Start Xvfb in the background\n\
+Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &\n\
+# Wait a moment for Xvfb to start\n\
+sleep 2\n\
+# Start the application\n\
+exec yarn start\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
 # Expose the port your app runs on
 EXPOSE 3000
 
-# Start the application
-CMD ["yarn", "start"]
+# Use the startup script
+CMD ["/app/start.sh"]
