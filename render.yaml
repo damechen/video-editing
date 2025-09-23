@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: video-editing
+    env: node
+    buildCommand: |
+      apt-get update && 
+      apt-get install -y libxi-dev libx11-dev libxext-dev libglu1-mesa-dev &&
+      yarn install
+    startCommand: yarn start
+    envVars:
+      - key: NODE_ENV
+        value: production
