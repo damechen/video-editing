@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     python3 \
     python3-pip \
+    python3-dev \
     make \
     g++ \
     # X11 and OpenGL libraries for gl package
@@ -24,9 +25,6 @@ RUN apt-get update && apt-get install -y \
 # Set environment variables for node-gyp and headless gl
 ENV DISPLAY=:99
 ENV PYTHON=/usr/bin/python3
-
-# Configure npm to use the correct Python version
-RUN npm config set python /usr/bin/python3
 
 WORKDIR /app
 
