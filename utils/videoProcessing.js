@@ -109,10 +109,22 @@ export async function concatenateVideos(videoPaths, outputPath = "./concatenated
             '-f', 'concat',           // Use concat demuxer
             '-safe', '0',             // Allow absolute paths
             '-i', fileListPath,       // Input file list
-            '-c', 'copy',             // Copy streams without re-encoding
+            '-c:v', 'libx264',        // Re-encode video using H.264
+            '-preset', 'medium',      // Encoding preset (balance of speed/quality)
+            '-crf', '23',            // Constant Rate Factor (lower = better quality)
+            '-c:a', 'aac',           // Re-encode audio using AAC
+            '-b:a', '128k',          // Audio bitrate
             '-y',                     // Overwrite output file
             outputPath
         ])
+        // const { stdout, stderr } = await execa('ffmpeg', [
+        //     '-f', 'concat',           // Use concat demuxer
+        //     '-safe', '0',             // Allow absolute paths
+        //     '-i', fileListPath,       // Input file list
+        //     '-c', 'copy',             // Copy streams without re-encoding
+        //     '-y',                     // Overwrite output file
+        //     outputPath
+        // ])
         
         console.log('FFmpeg concat completed successfully')
         if (stderr) console.log('FFmpeg stderr:', stderr)
