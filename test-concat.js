@@ -55,7 +55,7 @@ async function testConcatEndpoint() {
 }
 
 async function testPromptVideoEndpoint() {
-    const serverUrl = 'http://localhost:3003/create-prompt-video'
+    const serverUrl = 'https://video-editing-1.onrender.com/create-prompt-video'
     
     // Check if video files exist
     const videoUrl = 'http://stream.mux.com/V00lHajD02rmT2bExmWF9o901sPnyCL63vL1ux00XJGooIs/medium.mp4'
