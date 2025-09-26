@@ -2,6 +2,51 @@ import editly from 'editly'
 import { execa } from 'execa'
 import fs from 'fs'
 import path from 'path'
+import axios from 'axios'
+import crypto from 'crypto'
+import os from 'os'
+
+export async function downloadVideo(url, outputPath = null) {
+    try {
+        console.log(`Downloading video from: ${url}`)
+        const response = await axios.get(url, { responseType: 'arraybuffer' })
+        const buffer = Buffer.from(response.data)
+        
+        // Generate output path if not provided
+        if (!outputPath) {
+            const fileName = url.split('/').pop() || `video_${crypto.randomUUID()}.mp4`
+            outputPath = path.join(os.tmpdir(), fileName)
+        }
+        
+        fs.writeFileSync(outputPath, buffer)
+        console.log(`Video downloaded to: ${outputPath}`)
+        return outputPath
+    } catch (error) {
+        console.error('Error downloading video:', error)
+        throw new Error(`Failed to download video from ${url}: ${error.message}`)
+    }
+}
+
+export async function uploadToMux(videoPath, muxUploadUrl) {
+    try {
+        console.log(`Uploading video to Mux: ${videoPath}`)
+        const videoBuffer = fs.readFileSync(videoPath)
+        
+        const response = await axios.put(muxUploadUrl, videoBuffer, {
+            headers: {
+                'Content-Type': 'video/mp4'
+            },
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity
+        })
+        
+        console.log('Video uploaded to Mux successfully')
+        return response.data
+    } catch (error) {
+        console.error('Error uploading to Mux:', error)
+        throw new Error(`Failed to upload video to Mux: ${error.message}`)
+    }
+}
 
 export async function getVideoDimensions(videoPath) {
     try {
