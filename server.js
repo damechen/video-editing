@@ -1,6 +1,6 @@
 import express from 'express'
 import multer from 'multer'
-import { concatenateVideos, getVideoDimensions, splitVideo } from './utils/videoProcessing.js'
+import { concatenateVideos, downloadVideo, uploadToMux } from './utils/videoProcessing.js'
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
@@ -158,32 +158,60 @@ app.post('/concat-videos', upload.array('videos'), async (req, res) => {
 
 // POST endpoint for creating prompt videos
 app.post('/create-prompt-video', async (req, res) => {
+  const requestId = crypto.randomUUID()
+  let downloadedVideos = []
+  let outputPath = null
+
   try {
-    const { videoUrl, prompts } = req.body
+    const { prompts, muxUploadUrl } = req.body
 
-    // Download the video from videoUrl and save it to a temporary file
-    const response = await axios.get(videoUrl, { responseType: 'arraybuffer' })
-    const buffer = Buffer.from(response.data)
-    const tempFilePath = path.join(os.tmpdir(), `${crypto.randomUUID()}-${videoUrl.split('/').pop()}`)
-    fs.writeFileSync(tempFilePath, buffer)
+    // Validate input
+    if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompts array is required and cannot be empty'
+      })
+    }
 
-    // Now we need to split the video into chunks based on prompts[].start using ffmpeg
-    const downloadedVideoFiles = (await splitVideo(tempFilePath, prompts)).map((file, index) => {
-      return {
-        path: file,
-        prompt: prompts[index].text
+    if (!muxUploadUrl) {
+      return res.status(400).json({
+        success: false,
+        error: 'muxUploadUrl is required'
+      })
+    }
+
+    console.log(`[${requestId}] Processing ${prompts.length} prompts`)
+
+    // Download all videos from mp4Urls
+    for (let i = 0; i < prompts.length; i++) {
+      const prompt = prompts[i]
+      if (!prompt.mp4Url) {
+        throw new Error(`Prompt at index ${i} is missing mp4Url`)
       }
-    })
+      if (!prompt.question) {
+        throw new Error(`Prompt at index ${i} is missing question`)
+      }
 
-    const outputPath = path.join(os.tmpdir(), `${crypto.randomUUID()}.mp4`)
-    const clips = downloadedVideoFiles.map(file => {
+      console.log(`[${requestId}] Downloading video ${i + 1}/${prompts.length} from: ${prompt.mp4Url}`)
+      const downloadPath = await downloadVideo(prompt.mp4Url)
+      downloadedVideos.push({
+        path: downloadPath,
+        question: prompt.question,
+        index: i
+      })
+    }
+
+    console.log(`[${requestId}] All videos downloaded, creating editly composition`)
+
+    // Create editly clips with prompt questions and videos
+    const clips = downloadedVideos.map(video => {
       return [
         {
-          duration: Math.ceil((file.prompt.length / 10)),
+          duration: Math.max(3, Math.ceil(video.question.length / 15)), // Minimum 3 seconds, or based on question length
           layers: [
             {
               type: "title-background",
-              text: file.prompt,
+              text: video.question,
               background: { type: "linear-gradient", colors: ["#667eea", "#764ba2"] },
             }
           ],
@@ -192,15 +220,18 @@ app.post('/create-prompt-video', async (req, res) => {
           layers: [
             {
               type: "video",
-              path: file.path,
+              path: video.path,
             }
           ]
         },
       ]
     }).flat()
 
+    // Generate output path for the final video
+    outputPath = path.join(os.tmpdir(), `prompt_video_${requestId}.mp4`)
 
-    const video = await editly({
+    console.log(`[${requestId}] Rendering video with editly`)
+    await editly({
       outPath: outputPath,
       defaults: {
         transition: { name: "random" },
@@ -209,29 +240,37 @@ app.post('/create-prompt-video', async (req, res) => {
       clips,
     })
 
-    // Clean up temporary files
-    // cleanupFiles([tempFilePath, ...downloadedVideoFiles.map(file => file.path)])
+    console.log(`[${requestId}] Video rendered successfully, uploading to Mux`)
 
-    // Send the video file
-    res.download(outputPath, `${crypto.randomUUID()}.mp4`, (err) => {
-      if (err) {
-        console.error(`Error sending file:`, err)
-        res.status(500).json({
-          success: false,
-          error: 'Error sending video'
-        })
-      }
+    // Upload to Mux
+    await uploadToMux(outputPath, muxUploadUrl)
+
+    console.log(`[${requestId}] Upload to Mux completed successfully`)
+
+    // Clean up downloaded videos
+    cleanupFiles(downloadedVideos.map(v => v.path))
+
+    // Clean up output file
+    cleanupFiles([outputPath])
+
+    res.json({
+      success: true,
+      message: 'Video created and uploaded to Mux successfully',
+      requestId
     })
 
-    // Clean up output file after sending
-    // setTimeout(() => {
-    //   cleanupFiles([outputPath])
-    // }, 10000) // Wait 10 seconds before cleanup to ensure download completes
   } catch (error) {
-    console.error('Error creating prompt video:', error)
+    console.error(`[${requestId}] Error creating prompt video:`, error)
+
+    // Clean up all files on error
+    const filesToCleanup = [...downloadedVideos.map(v => v.path)]
+    if (outputPath) filesToCleanup.push(outputPath)
+    cleanupFiles(filesToCleanup)
+
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: error.message || 'Internal server error',
+      requestId
     })
   }
 })
